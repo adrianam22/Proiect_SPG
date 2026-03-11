@@ -44,10 +44,10 @@ def load_texture(path, repeat=True):
     return tid
 
 #teren cu munti folosind functii gaussiene
+#cu cat un punct e mai departe de varf, cu atat inaltimea scade exponential
 def generate_heightmap_fbm(grid, max_height=14.0, seed=42):
     size = grid + 1
     h = np.zeros((size, size), dtype=np.float32)
-#
     def gaussian_peak(cx, cy, height, radius):
         for y in range(size):
             for x in range(size):
@@ -121,36 +121,28 @@ def draw_skybox(tex_top, tex_front, tex_back, tex_left, tex_right, s=CUBE_S):
             glTexCoord2f(u,v); glVertex3f(x,y,z)
         glEnd()
 
-    # Sus – cer
     face(tex_top,[
         ((0,0),(-s, s,-s)), ((1,0),( s, s,-s)),
         ((1,1),( s, s, s)), ((0,1),(-s, s, s))])
 
-    # Faţă  -Z  (sud)
     face(tex_front,[
         ((0,0),(-s,-s,-s)), ((1,0),( s,-s,-s)),
         ((1,1),( s, s,-s)), ((0,1),(-s, s,-s))])
 
-    # Spate +Z  (nord)
     face(tex_back,[
         ((0,0),( s,-s, s)), ((1,0),(-s,-s, s)),
         ((1,1),(-s, s, s)), ((0,1),( s, s, s))])
 
-    # Stânga -X  (vest)
     face(tex_left,[
         ((0,0),(-s,-s, s)), ((1,0),(-s,-s,-s)),
         ((1,1),(-s, s,-s)), ((0,1),(-s, s, s))])
 
-    # Dreapta +X  (est)
     face(tex_right,[
         ((0,0),( s,-s,-s)), ((1,0),( s,-s, s)),
         ((1,1),( s, s, s)), ((0,1),( s, s,-s))])
 
     glEnable(GL_DEPTH_TEST)
 
-# ────────────────────────────────────────────────────────────────────────────
-#   PLANUL DE BAZĂ
-# ────────────────────────────────────────────────────────────────────────────
 def draw_ground(tex, s=CUBE_S, rep=1.):
     glEnable(GL_TEXTURE_2D); glEnable(GL_LIGHTING)
     glBindTexture(GL_TEXTURE_2D, tex)
@@ -164,48 +156,34 @@ def draw_ground(tex, s=CUBE_S, rep=1.):
     glTexCoord2f(0,rep);   glVertex3f(-s,y, s)
     glEnd()
 
-# ────────────────────────────────────────────────────────────────────────────
-#   TEREN RELIEF
-# ────────────────────────────────────────────────────────────────────────────
 def draw_terrain(vao, ibo, cnt, tex_grass):
-    """Randează relieful cu textura de iarbă, fără iluminare artificială."""
     glEnable(GL_TEXTURE_2D)
-    glDisable(GL_LIGHTING)   # fără lighting – elimină dungile de umbră
+    glDisable(GL_LIGHTING)
     glBindVertexArray(vao)
     glBindTexture(GL_TEXTURE_2D, tex_grass)
     glColor3f(1, 1, 1)
     glDrawElements(GL_TRIANGLES, cnt, GL_UNSIGNED_INT, None)
     glBindVertexArray(0)
-    glEnable(GL_LIGHTING)    # reactivăm pentru restul scenei
+    glEnable(GL_LIGHTING)
 
-# ────────────────────────────────────────────────────────────────────────────
-#   MARKERI  – arată că suntem ÎNĂUNTRUL cubului
-#   (colţuri interioare vizibile + axe centrate)
-# ────────────────────────────────────────────────────────────────────────────
 def draw_interior_markers(s=CUBE_S):
-    """
-    Desenează marginile interioare ale cubului (wireframe) şi
-    3 axe de referinţă centrate în origine, astfel încât observatorul
-    din centru vede clar că se află ÎNĂUNTRUL unui cub.
-    """
     glDisable(GL_TEXTURE_2D)
     glDisable(GL_LIGHTING)
     glLineWidth(1.2)
 
-    # ── Muchiile cubului (wireframe interior) ────────────────────────────
-    glColor3f(1.0, 1.0, 1.0)   # alb semitransparent
+    glColor3f(1.0, 1.0, 1.0)
     glEnable(GL_BLEND)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
     glColor4f(1.0, 1.0, 1.0, 0.18)
 
     edges = [
-        # jos
+
         ((-s,-s,-s),( s,-s,-s)), (( s,-s,-s),( s,-s, s)),
         (( s,-s, s),(-s,-s, s)), ((-s,-s, s),(-s,-s,-s)),
-        # sus
+
         ((-s, s,-s),( s, s,-s)), (( s, s,-s),( s, s, s)),
         (( s, s, s),(-s, s, s)), ((-s, s, s),(-s, s,-s)),
-        # verticale
+
         ((-s,-s,-s),(-s, s,-s)), (( s,-s,-s),( s, s,-s)),
         (( s,-s, s),( s, s, s)), ((-s,-s, s),(-s, s, s)),
     ]
@@ -214,23 +192,18 @@ def draw_interior_markers(s=CUBE_S):
         glVertex3fv(a); glVertex3fv(b)
     glEnd()
 
-    # ── Axe X/Y/Z centrate ───────────────────────────────────────────────
     glLineWidth(2.5)
     axis_len = s * 0.35
 
     glBegin(GL_LINES)
-    # X – roşu
     glColor4f(1.0, 0.25, 0.25, 0.85)
     glVertex3f(-axis_len, 0, 0); glVertex3f(axis_len, 0, 0)
-    # Y – verde
     glColor4f(0.25, 1.0, 0.35, 0.85)
     glVertex3f(0, -axis_len, 0); glVertex3f(0, axis_len, 0)
-    # Z – albastru
     glColor4f(0.25, 0.55, 1.0, 0.85)
     glVertex3f(0, 0, -axis_len); glVertex3f(0, 0, axis_len)
     glEnd()
 
-    # ── Punct central (origine) ──────────────────────────────────────────
     glPointSize(8.0)
     glBegin(GL_POINTS)
     glColor4f(1.0, 1.0, 0.0, 0.9)   # galben
@@ -243,9 +216,6 @@ def draw_interior_markers(s=CUBE_S):
     glEnable(GL_LIGHTING)
     glEnable(GL_TEXTURE_2D)
 
-# ────────────────────────────────────────────────────────────────────────────
-#   ILUMINARE
-# ────────────────────────────────────────────────────────────────────────────
 def setup_lighting():
     glEnable(GL_LIGHTING); glEnable(GL_LIGHT0)
     glLightfv(GL_LIGHT0,GL_POSITION, [0.6, 1.0, 0.4, 0.0])
@@ -255,13 +225,9 @@ def setup_lighting():
     glEnable(GL_COLOR_MATERIAL)
     glColorMaterial(GL_FRONT_AND_BACK,GL_AMBIENT_AND_DIFFUSE)
 
-# ────────────────────────────────────────────────────────────────────────────
-#   MAIN
-# ────────────────────────────────────────────────────────────────────────────
 def main():
     pygame.init()
     pygame.display.set_mode((WINDOW_W,WINDOW_H), DOUBLEBUF|OPENGL|RESIZABLE)
-    pygame.display.set_caption("Scenă 3D în Cub – punct fix de observare | ESC=ieşire")
     pygame.mouse.set_visible(False)
     pygame.event.set_grab(True)
 
@@ -279,7 +245,6 @@ def main():
     set_proj(WINDOW_W, WINDOW_H)
     setup_lighting()
 
-    # ── Texturi ────────────────────────────────────────────────────────────
     def tp(n): return os.path.join(TEXTURE_DIR, n)
     tex_grass  = load_texture(tp("grass.jpg"),          repeat=True)
     tex_sky    = load_texture(tp("sky_top.jpg"),         repeat=False)
@@ -288,23 +253,18 @@ def main():
     tex_left   = load_texture(tp("mountain_left.jpg"),   repeat=False)
     tex_right  = load_texture(tp("mountain_right.jpg"),  repeat=False)
 
-    # ── Heightmap procedural fBm ──────────────────────────────────────────
-    TERRAIN_SCALE  = CUBE_S * 2.0   # cât de mare e terenul în XZ
-    TERRAIN_GRID   = 80             # rezoluție grilă (80×80 quad-uri)
-    MAX_HEIGHT     = 22.0           # înălțimea maximă a muntelui
-    # Schimbă seed=42 pentru o formă diferită de teren
+    TERRAIN_SCALE  = CUBE_S * 2.0
+    TERRAIN_GRID   = 80
+    MAX_HEIGHT     = 22.0
     hmap = generate_heightmap_fbm(TERRAIN_GRID, MAX_HEIGHT, seed=42)
     vao, ibo, cnt, _ = build_terrain(TERRAIN_GRID, TERRAIN_SCALE, hmap)
 
-
-    # ── Camera FIXĂ în origine; doar roteşte ──────────────────────────────
-    yaw   = 0.0      # rotaţie orizontală (grade)
-    pitch = -12.0    # privire uşor în jos la start
+    yaw   = 0.0
+    pitch = -12.0
     dragging = False
 
     clock = pygame.time.Clock()
 
-    # ─────────────────────────────────────────────────────────────────────
     running = True
     while running:
         clock.tick(60)
@@ -331,13 +291,9 @@ def main():
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         glLoadIdentity()
-
-        # Cameră fixă: aplicăm DOAR rotaţia (nu translaţie)
         glRotatef(-pitch, 1, 0, 0)
         glRotatef(-yaw,   0, 1, 0)
-        # Camera rămâne la (0,0,0) – centrul cubului
 
-        # 1 – skybox (cub)
         draw_skybox(tex_sky, tex_front, tex_back, tex_left, tex_right)
 
         glPushMatrix()
@@ -347,10 +303,6 @@ def main():
         draw_ground(tex_grass)
         draw_interior_markers()
         fps = clock.get_fps()
-        pygame.display.set_caption(
-            f"Scenă 3D în Cub  |  FPS:{fps:.0f}  |  "
-            f"Yaw:{yaw:.0f}°  Pitch:{pitch:.0f}°  FOV:{fov:.0f}°  |  "
-            f"Click+drag=roteşte  Scroll=zoom  R=reset  ESC=ieşire")
         pygame.display.flip()
 
     pygame.quit(); sys.exit()
