@@ -13,9 +13,12 @@ ROAD_WIDTH = 6.5
 CORNER_SEGS = 18
 ROAD_LIFT = 0.05
 TEX_SCALE = 1
-
-
+#construieste forma circuitului
 def _build_centerline(cx, cz, W, H, R, segs):
+    # cx, cz = centrul circuitului
+    # W, H = latime si inaltime
+    # R = raza colturilor rotunjite
+    # segs = cate segmente are fiecare colt
     hw, hh = W / 2, H / 2
     arcs = [
         ((cx + hw - R, cz - hh + R), -math.pi / 2, 0.0),
@@ -30,8 +33,7 @@ def _build_centerline(cx, cz, W, H, R, segs):
             a = a_start + t * (a_end - a_start)
             pts.append((acx + R * math.cos(a), acz + R * math.sin(a)))
     return pts
-
-
+# calculeaza directia drumului
 def _smooth_normals(pts):
     N = len(pts)
     normals = []
@@ -57,7 +59,7 @@ def _smooth_normals(pts):
         normals.append((-tz, tx))
     return normals
 
-
+#construieste modelul 3d pt circuitului (vertexi + indecsi)
 def build_circuit(circuit_y, cx=CIRCUIT_CX, cz=CIRCUIT_CZ, W=CIRCUIT_W,
                   H=CIRCUIT_H, R=CORNER_R, road_width=ROAD_WIDTH,
                   segs=CORNER_SEGS):
@@ -121,8 +123,7 @@ def build_circuit(circuit_y, cx=CIRCUIT_CX, cz=CIRCUIT_CZ, W=CIRCUIT_W,
 
     glBindVertexArray(0)
     return vao, ibo, len(indices)
-
-
+#deseneaza circuitul
 def draw_circuit(vao, ibo, cnt, tex_road):
     glEnable(GL_TEXTURE_2D)
     glEnable(GL_LIGHTING)
@@ -132,7 +133,7 @@ def draw_circuit(vao, ibo, cnt, tex_road):
     glDrawElements(GL_TRIANGLES, cnt, GL_UNSIGNED_INT, None)
     glBindVertexArray(0)
 
-
+#circuitul este pus pe teren
 def compute_circuit_y(hmap, grid, terrain_scale, cx=CIRCUIT_CX, cz=CIRCUIT_CZ,
                       W=CIRCUIT_W, H=CIRCUIT_H, R=CORNER_R,
                       segs=CORNER_SEGS, lift=ROAD_LIFT):

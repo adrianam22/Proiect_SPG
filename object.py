@@ -2,74 +2,6 @@ import math
 from OpenGL.GL import *
 from OpenGL.GLU import *
 
-
-def _quad(ax, ay, az, bx, by, bz, cx, cy, cz, dx, dy, dz,
-          nx, ny, nz, u_max=1.0, v_max=1.0):
-    glNormal3f(nx, ny, nz)
-    glTexCoord2f(0, 0)
-    glVertex3f(ax, ay, az)
-    glTexCoord2f(u_max, 0)
-    glVertex3f(bx, by, bz)
-    glTexCoord2f(u_max, v_max)
-    glVertex3f(cx, cy, cz)
-    glTexCoord2f(0, v_max)
-    glVertex3f(dx, dy, dz)
-
-
-def draw_building(x, y, z, w, h, d, tex_wall, tex_roof, roof_h_ratio=0.45):
-    hx, hz = w / 2, d / 2
-    roof_h = w * roof_h_ratio
-
-    glEnable(GL_TEXTURE_2D)
-    glEnable(GL_LIGHTING)
-    glColor3f(1, 1, 1)
-
-    glBindTexture(GL_TEXTURE_2D, tex_wall)
-    glBegin(GL_QUADS)
-    _quad(x - hx, y, z - hz, x + hx, y, z - hz, x + hx, y + h, z - hz, x - hx, y + h, z - hz, 0, 0, -1, w / 3, h / 3)
-    _quad(x + hx, y, z + hz, x - hx, y, z + hz, x - hx, y + h, z + hz, x + hx, y + h, z + hz, 0, 0, 1, w / 3, h / 3)
-    _quad(x - hx, y, z + hz, x - hx, y, z - hz, x - hx, y + h, z - hz, x - hx, y + h, z + hz, -1, 0, 0, d / 3, h / 3)
-    _quad(x + hx, y, z - hz, x + hx, y, z + hz, x + hx, y + h, z + hz, x + hx, y + h, z - hz, 1, 0, 0, d / 3, h / 3)
-    glEnd()
-
-    glBindTexture(GL_TEXTURE_2D, tex_roof)
-    glBegin(GL_TRIANGLES)
-    apex_y = y + h + roof_h
-
-    glNormal3f(0, 1, -0.5)
-    glTexCoord2f(0, 0)
-    glVertex3f(x - hx, y + h, z - hz)
-    glTexCoord2f(1, 0)
-    glVertex3f(x + hx, y + h, z - hz)
-    glTexCoord2f(0.5, 1)
-    glVertex3f(x, apex_y, z)
-
-    glNormal3f(0, 1, 0.5)
-    glTexCoord2f(0, 0)
-    glVertex3f(x + hx, y + h, z + hz)
-    glTexCoord2f(1, 0)
-    glVertex3f(x - hx, y + h, z + hz)
-    glTexCoord2f(0.5, 1)
-    glVertex3f(x, apex_y, z)
-
-    glNormal3f(-0.5, 1, 0)
-    glTexCoord2f(0, 0)
-    glVertex3f(x - hx, y + h, z + hz)
-    glTexCoord2f(1, 0)
-    glVertex3f(x - hx, y + h, z - hz)
-    glTexCoord2f(0.5, 1)
-    glVertex3f(x, apex_y, z)
-
-    glNormal3f(0.5, 1, 0)
-    glTexCoord2f(0, 0)
-    glVertex3f(x + hx, y + h, z - hz)
-    glTexCoord2f(1, 0)
-    glVertex3f(x + hx, y + h, z + hz)
-    glTexCoord2f(0.5, 1)
-    glVertex3f(x, apex_y, z)
-    glEnd()
-
-
 def draw_tree(x, y, z, trunk_h=3.0, trunk_r=0.22, crown_h=4.5, crown_r=1.8,
               tex_bark=None, tex_leaves=None):
     glEnable(GL_TEXTURE_2D)
@@ -108,7 +40,6 @@ def draw_tree(x, y, z, trunk_h=3.0, trunk_r=0.22, crown_h=4.5, crown_r=1.8,
     gluDeleteQuadric(q)
     glColor3f(1, 1, 1)
     glEnable(GL_TEXTURE_2D)
-
 
 def draw_lamppost(x, y, z, pole_h=5.5, pole_r=0.09, globe_r=0.28):
     glDisable(GL_TEXTURE_2D)
@@ -150,7 +81,6 @@ def draw_lamppost(x, y, z, pole_h=5.5, pole_r=0.09, globe_r=0.28):
     gluDeleteQuadric(q)
     glColor3f(1, 1, 1)
     glEnable(GL_TEXTURE_2D)
-
 
 def draw_bench(x, y, z, length=2.2, angle_y=0.0):
     glDisable(GL_TEXTURE_2D)
@@ -270,7 +200,6 @@ def draw_billboard(x, y, z, tex, width=5.0, height=7.0):
 
     glPopAttrib()
 
-
 def load_billboard_texture(path):
     from PIL import Image as PILImage
 
@@ -309,8 +238,6 @@ def draw_all_objects(base_y, textures):
                          CORNER_SEGS as CSEGS,
                          _build_centerline, _smooth_normals)
 
-    tw = textures.get('wall')
-    tr = textures.get('roof')
     tb = textures.get('bark')
     tl = textures.get('leaves')
     tree_billboards = textures.get('tree_billboard') or []
@@ -356,17 +283,6 @@ def draw_all_objects(base_y, textures):
 
     n_trees = 16
     if not only_extras:
-        b_hw = CW * 0.25
-        b_hh = CH * 0.20
-        buildings_int = [
-            (CX - b_hw, CZ - b_hh, 6.0, 5.5, 6.0),
-            (CX + b_hw, CZ - b_hh, 7.0, 6.0, 6.5),
-            (CX - b_hw, CZ + b_hh, 6.5, 5.0, 6.0),
-            (CX + b_hw, CZ + b_hh, 7.5, 6.5, 6.5),
-        ]
-        for bx, bz, bw, bh, bd in buildings_int:
-            draw_building(bx, y, bz, bw, bh, bd, tw, tr)
-
         tree_pts = _pts_on_circuit(n_trees, dist_from_center=-(RW / 2 + 1.6), phase=0.0)
         if tree_billboards:
             n_tex = len(tree_billboards)

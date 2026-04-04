@@ -1,11 +1,9 @@
 import os
 import math
-import ctypes
 import struct
 import numpy as np
 from OpenGL.GL import *
 from OpenGL.GLU import *
-
 
 def load_colormap(path: str) -> int:
     from PIL import Image as PILImage
@@ -34,7 +32,6 @@ def load_colormap(path: str) -> int:
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
     return tid
-
 
 def _parse_obj(path: str):
     positions = []
@@ -104,7 +101,6 @@ def _parse_obj(path: str):
     glBindVertexArray(0)
     return vao, n_verts
 
-
 class KenneyModel:
     def __init__(self, obj_path: str):
         self.name = os.path.splitext(os.path.basename(obj_path))[0]
@@ -152,7 +148,6 @@ class KenneyModel:
         glBindVertexArray(0)
 
         glPopMatrix()
-
 
 class KenneyScene:
     BUILDINGS = [

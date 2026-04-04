@@ -16,7 +16,6 @@ from circuit import build_circuit, draw_circuit, compute_circuit_y, ROAD_TEX_NAM
 from object import draw_all_objects, load_billboard_texture
 from loader_objects import load_colormap, KenneyScene, load_glb_model, draw_glb_model
 
-
 def main():
     pygame.init()
     pygame.display.set_mode((WINDOW_W, WINDOW_H), DOUBLEBUF | OPENGL | RESIZABLE)
