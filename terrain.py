@@ -80,12 +80,11 @@ def build_terrain(grid, size, hmap):
     return int(vao), int(ibo), len(indices), float(np.max(np.abs(hmap)))
 
 
-def draw_terrain(vao, ibo, cnt, tex_grass):
+def draw_terrain(vao, ibo, cnt, tex_grass, tint=(0.42, 0.45, 0.40)):
     glEnable(GL_TEXTURE_2D)
-    glDisable(GL_LIGHTING)
+    glEnable(GL_LIGHTING)
     glBindVertexArray(vao)
     glBindTexture(GL_TEXTURE_2D, tex_grass)
-    glColor3f(1, 1, 1)
+    glColor3f(*tint)
     glDrawElements(GL_TRIANGLES, cnt, GL_UNSIGNED_INT, None)
     glBindVertexArray(0)
-    glEnable(GL_LIGHTING)

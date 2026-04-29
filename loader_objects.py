@@ -1,6 +1,8 @@
 import os
+import io
 import math
 import struct
+import ctypes
 import numpy as np
 from OpenGL.GL import *
 from OpenGL.GLU import *
@@ -127,7 +129,7 @@ class KenneyModel:
     def width(self):
         return self._bbox[1][0] - self._bbox[0][0]
 
-    def draw(self, x, y, z, scale=1.0, rot_y=0.0, tex_id=None):
+    def draw(self, x, y, z, scale=1.0, rot_y=0.0, tex_id=None, shadow_pass=False):
         if self.vao is None:
             return
 
@@ -137,18 +139,22 @@ class KenneyModel:
             glRotatef(rot_y, 0, 1, 0)
         glScalef(scale, scale, scale)
 
-        glEnable(GL_TEXTURE_2D)
-        glEnable(GL_LIGHTING)
-        if tex_id:
+        if shadow_pass:
+            glDisable(GL_TEXTURE_2D)
+            glDisable(GL_LIGHTING)
+            glColor4f(0.0, 0.0, 0.0, 0.22)
+        else:
+            glEnable(GL_TEXTURE_2D)
+            glEnable(GL_LIGHTING)
+            glColor3f(1, 1, 1)
+        if tex_id and not shadow_pass:
             glBindTexture(GL_TEXTURE_2D, tex_id)
-        glColor3f(1, 1, 1)
 
         glBindVertexArray(self.vao)
         glDrawArrays(GL_TRIANGLES, 0, self.n)
         glBindVertexArray(0)
 
         glPopMatrix()
-
 class KenneyScene:
     BUILDINGS = [
         "building-type-a",
@@ -169,6 +175,42 @@ class KenneyScene:
             path = os.path.join(obj_folder, f"{name}.obj")
             if os.path.exists(path):
                 self.models[name] = KenneyModel(path)
+
+    def get_building_instances(self, base_y: float):
+        from circuit import (CIRCUIT_CX as CX, CIRCUIT_CZ as CZ,
+                             CIRCUIT_W as CW, CIRCUIT_H as CH,
+                             ROAD_WIDTH as RW)
+
+        b_names = [m for m in self.BUILDINGS if m in self.models]
+        if not b_names:
+            return []
+
+        inner_hw = max(6.0, CW / 2.0 - (RW / 2.0 + 6.0))
+        inner_hh = max(6.0, CH / 2.0 - (RW / 2.0 + 6.0))
+        b_positions = [
+            (CX - inner_hw * 0.6, CZ - inner_hh * 0.5),
+            (CX + inner_hw * 0.6, CZ - inner_hh * 0.5),
+            (CX - inner_hw * 0.6, CZ + inner_hh * 0.5),
+            (CX + inner_hw * 0.6, CZ + inner_hh * 0.5),
+        ]
+
+        instances = []
+        for i, (bx, bz) in enumerate(b_positions):
+            name = b_names[i % len(b_names)]
+            model = self.models[name]
+            scale = 6.0 / max(model.height, 0.1)
+            rot = float((i * 90) % 360)
+            instances.append({
+                "name": name,
+                "x": bx,
+                "y": base_y,
+                "z": bz,
+                "scale": scale,
+                "rot_y": rot,
+                "bbox_min": tuple(model._bbox[0]),
+                "bbox_max": tuple(model._bbox[1]),
+            })
+        return instances
 
     def _circuit_positions(self, n, dist_from_center, phase=0.0):
         from circuit import (CIRCUIT_CX as CX, CIRCUIT_CZ as CZ,
@@ -212,32 +254,25 @@ class KenneyScene:
                     break
         return result
 
-    def draw_all(self, base_y: float):
-        from circuit import (CIRCUIT_CX as CX, CIRCUIT_CZ as CZ,
-                             CIRCUIT_W as CW, CIRCUIT_H as CH,
-                             ROAD_WIDTH as RW)
+    def draw_all(self, base_y: float, shadow_pass=False):
+        from circuit import ROAD_WIDTH as RW
 
         y = base_y
         t_names = [m for m in self.TREES if m in self.models]
+
+        for instance in self.get_building_instances(base_y):
+            self.models[instance["name"]].draw(
+                instance["x"],
+                y,
+                instance["z"],
+                scale=instance["scale"],
+                rot_y=instance["rot_y"],
+                tex_id=self.tex,
+                shadow_pass=shadow_pass,
+            )
+
         if not t_names:
             return
-
-        b_names = [m for m in self.BUILDINGS if m in self.models]
-        if b_names:
-            inner_hw = max(6.0, CW / 2.0 - (RW / 2.0 + 6.0))
-            inner_hh = max(6.0, CH / 2.0 - (RW / 2.0 + 6.0))
-            b_positions = [
-                (CX - inner_hw * 0.6, CZ - inner_hh * 0.5),
-                (CX + inner_hw * 0.6, CZ - inner_hh * 0.5),
-                (CX - inner_hw * 0.6, CZ + inner_hh * 0.5),
-                (CX + inner_hw * 0.6, CZ + inner_hh * 0.5),
-            ]
-            for i, (bx, bz) in enumerate(b_positions):
-                name = b_names[i % len(b_names)]
-                m = self.models[name]
-                scale = 6.0 / max(m.height, 0.1)
-                rot = (i * 90) % 360
-                m.draw(bx, y, bz, scale=scale, rot_y=float(rot), tex_id=self.tex)
 
         tree_pts = self._circuit_positions(16, dist_from_center=-(RW / 2 + 1.6), phase=0.0)
         for i, (px, pz, rot) in enumerate(tree_pts):
@@ -245,7 +280,7 @@ class KenneyScene:
             m = self.models[name]
             scale = 5.5 / max(m.height, 0.1)
             rot_var = (i * 73) % 360
-            m.draw(px, y, pz, scale=scale, rot_y=float(rot_var), tex_id=self.tex)
+            m.draw(px, y, pz, scale=scale, rot_y=float(rot_var), tex_id=self.tex, shadow_pass=shadow_pass)
 
 
 def _get_accessor_data(gltf, binary, acc_idx):
@@ -270,6 +305,98 @@ def _get_accessor_data(gltf, binary, acc_idx):
     return data
 
 
+def _quat_to_matrix(quat):
+    x, y, z, w = quat
+    xx, yy, zz = x * x, y * y, z * z
+    xy, xz, yz = x * y, x * z, y * z
+    wx, wy, wz = w * x, w * y, w * z
+    return np.array([
+        [1.0 - 2.0 * (yy + zz), 2.0 * (xy - wz), 2.0 * (xz + wy), 0.0],
+        [2.0 * (xy + wz), 1.0 - 2.0 * (xx + zz), 2.0 * (yz - wx), 0.0],
+        [2.0 * (xz - wy), 2.0 * (yz + wx), 1.0 - 2.0 * (xx + yy), 0.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ], dtype=np.float32)
+
+
+def _node_matrix(node):
+    if getattr(node, "matrix", None):
+        return np.array(node.matrix, dtype=np.float32).reshape((4, 4)).T
+
+    translation = getattr(node, "translation", None) or [0.0, 0.0, 0.0]
+    rotation = getattr(node, "rotation", None) or [0.0, 0.0, 0.0, 1.0]
+    scale = getattr(node, "scale", None) or [1.0, 1.0, 1.0]
+
+    t = np.identity(4, dtype=np.float32)
+    t[:3, 3] = np.array(translation, dtype=np.float32)
+
+    r = _quat_to_matrix(rotation)
+
+    s = np.identity(4, dtype=np.float32)
+    s[0, 0] = scale[0]
+    s[1, 1] = scale[1]
+    s[2, 2] = scale[2]
+
+    return t @ r @ s
+
+
+def _iter_scene_nodes(gltf):
+    scene_index = gltf.scene if gltf.scene is not None else 0
+    scene = gltf.scenes[scene_index]
+    roots = list(getattr(scene, "nodes", None) or [])
+    stack = [(node_index, np.identity(4, dtype=np.float32)) for node_index in roots]
+
+    while stack:
+        node_index, parent_matrix = stack.pop()
+        node = gltf.nodes[node_index]
+        world_matrix = parent_matrix @ _node_matrix(node)
+        yield node, world_matrix
+        for child_index in reversed(list(getattr(node, "children", None) or [])):
+            stack.append((child_index, world_matrix))
+
+
+def _load_glb_texture(gltf, binary, texture_idx, cache):
+    if texture_idx is None:
+        return None
+    if texture_idx in cache:
+        return cache[texture_idx]
+
+    try:
+        from PIL import Image as PILImage
+    except ImportError:
+        cache[texture_idx] = None
+        return None
+
+    texture = gltf.textures[texture_idx]
+    source_index = texture.source
+    if source_index is None:
+        cache[texture_idx] = None
+        return None
+
+    image = gltf.images[source_index]
+    if image.bufferView is None:
+        cache[texture_idx] = None
+        return None
+
+    buffer_view = gltf.bufferViews[image.bufferView]
+    start = buffer_view.byteOffset or 0
+    raw = binary[start:start + buffer_view.byteLength]
+    img = PILImage.open(io.BytesIO(raw)).convert("RGBA")
+    img = img.transpose(PILImage.FLIP_TOP_BOTTOM)
+    data = img.tobytes()
+
+    tid = int(glGenTextures(1))
+    glBindTexture(GL_TEXTURE_2D, tid)
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.width, img.height, 0,
+                 GL_RGBA, GL_UNSIGNED_BYTE, data)
+    glGenerateMipmap(GL_TEXTURE_2D)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+    cache[texture_idx] = tid
+    return tid
+
+
 def load_glb_model(path: str):
     try:
         import pygltflib
@@ -279,29 +406,60 @@ def load_glb_model(path: str):
     gltf = pygltflib.GLTF2().load(path)
     binary = gltf.binary_blob()
     primitives_out = []
+    texture_cache = {}
+    all_pos = []
 
-    for mesh in gltf.meshes:
+    for node, world_matrix in _iter_scene_nodes(gltf):
+        if node.mesh is None:
+            continue
+
+        normal_matrix = np.linalg.inv(world_matrix[:3, :3]).T
+        mesh = gltf.meshes[node.mesh]
         for prim in mesh.primitives:
             mat = gltf.materials[prim.material] if prim.material is not None else None
             color = (0.7, 0.7, 0.7)
             is_emissive = False
+            texture_id = None
             if mat and mat.pbrMetallicRoughness:
                 cf = mat.pbrMetallicRoughness.baseColorFactor
                 if cf:
                     color = (float(cf[0]), float(cf[1]), float(cf[2]))
+                base_color_tex = mat.pbrMetallicRoughness.baseColorTexture
+                if base_color_tex and base_color_tex.index is not None:
+                    texture_id = _load_glb_texture(gltf, binary, base_color_tex.index, texture_cache)
             if mat and mat.name and 'light' in mat.name.lower():
                 is_emissive = True
 
             pos_idx = prim.attributes.POSITION
             if pos_idx is None:
                 continue
-            positions = _get_accessor_data(gltf, binary, pos_idx)
+            raw_positions = _get_accessor_data(gltf, binary, pos_idx)
 
             nrm_idx = prim.attributes.NORMAL
             if nrm_idx is not None:
-                normals = _get_accessor_data(gltf, binary, nrm_idx)
+                raw_normals = _get_accessor_data(gltf, binary, nrm_idx)
             else:
-                normals = [(0.0, 1.0, 0.0)] * len(positions)
+                raw_normals = [(0.0, 1.0, 0.0)] * len(raw_positions)
+
+            uv_idx = prim.attributes.TEXCOORD_0
+            if uv_idx is not None:
+                uvs = _get_accessor_data(gltf, binary, uv_idx)
+            else:
+                uvs = [(0.0, 0.0)] * len(raw_positions)
+
+            positions = []
+            normals = []
+            for (px, py, pz), (nx, ny, nz) in zip(raw_positions, raw_normals):
+                world_pos = world_matrix @ np.array([px, py, pz, 1.0], dtype=np.float32)
+                positions.append((float(world_pos[0]), float(world_pos[1]), float(world_pos[2])))
+
+                world_nrm = normal_matrix @ np.array([nx, ny, nz], dtype=np.float32)
+                nrm_len = float(np.linalg.norm(world_nrm))
+                if nrm_len > 1e-9:
+                    world_nrm = world_nrm / nrm_len
+                else:
+                    world_nrm = np.array([0.0, 1.0, 0.0], dtype=np.float32)
+                normals.append((float(world_nrm[0]), float(world_nrm[1]), float(world_nrm[2])))
 
             if prim.indices is not None:
                 raw_idx = _get_accessor_data(gltf, binary, prim.indices)
@@ -313,7 +471,8 @@ def load_glb_model(path: str):
             for idx in indices:
                 px, py, pz = positions[idx]
                 nx, ny, nz = normals[idx]
-                buf.extend([px, py, pz, nx, ny, nz])
+                u, v = uvs[idx]
+                buf.extend([px, py, pz, nx, ny, nz, u, v])
 
             arr = np.array(buf, dtype=np.float32)
             n_vert = len(indices)
@@ -325,11 +484,13 @@ def load_glb_model(path: str):
             glBindBuffer(GL_ARRAY_BUFFER, vbo)
             glBufferData(GL_ARRAY_BUFFER, arr.nbytes, arr, GL_STATIC_DRAW)
 
-            stride = 6 * 4
+            stride = 8 * 4
             glVertexPointer(3, GL_FLOAT, stride, ctypes.c_void_p(0))
             glNormalPointer(GL_FLOAT, stride, ctypes.c_void_p(12))
+            glTexCoordPointer(2, GL_FLOAT, stride, ctypes.c_void_p(24))
             glEnableClientState(GL_VERTEX_ARRAY)
             glEnableClientState(GL_NORMAL_ARRAY)
+            glEnableClientState(GL_TEXTURE_COORD_ARRAY)
 
             glBindVertexArray(0)
 
@@ -338,46 +499,80 @@ def load_glb_model(path: str):
                 'count': n_vert,
                 'color': color,
                 'emissive': is_emissive,
+                'texture_id': texture_id,
             })
-
-    all_pos = []
-    for mesh in gltf.meshes:
-        for prim in mesh.primitives:
-            if prim.attributes.POSITION is not None:
-                all_pos.extend(_get_accessor_data(gltf, binary, prim.attributes.POSITION))
+            all_pos.extend(positions)
 
     if all_pos:
+        xs = [p[0] for p in all_pos]
         ys = [p[1] for p in all_pos]
+        zs = [p[2] for p in all_pos]
+        x_min = min(xs)
+        x_max = max(xs)
+        x_center = (x_min + x_max) * 0.5
         height = max(ys) - min(ys)
         y_min = min(ys)
+        z_min = min(zs)
+        z_max = max(zs)
+        z_center = (z_min + z_max) * 0.5
     else:
+        x_min = -0.5
+        x_max = 0.5
+        x_center = 0.0
         height = 1.0
         y_min = 0.0
+        z_min = -0.5
+        z_max = 0.5
+        z_center = 0.0
 
     return {
         'primitives': primitives_out,
         'height': height,
         'y_min': y_min,
+        'x_min': x_min,
+        'x_max': x_max,
+        'x_center': x_center,
+        'z_min': z_min,
+        'z_max': z_max,
+        'z_center': z_center,
     }
 
 
-def draw_glb_model(model: dict, x: float, y: float, z: float, scale: float = 1.0, rot_y: float = 0.0):
+def draw_glb_model(model: dict, x: float, y: float, z: float, scale: float = 1.0, rot_y: float = 0.0,
+                   shadow_pass: bool = False, center_xz: bool = False, force_unlit: bool = False):
     if not model or not model.get('primitives'):
         return
 
+    pivot_x = model.get('x_center', 0.0) if center_xz else 0.0
+    pivot_z = model.get('z_center', 0.0) if center_xz else 0.0
+
     glPushMatrix()
-    glTranslatef(x, y - model['y_min'] * scale, z)
+    glTranslatef(x, y, z)
     if rot_y:
         glRotatef(rot_y, 0, 1, 0)
     glScalef(scale, scale, scale)
+    glTranslatef(-pivot_x, -model['y_min'], -pivot_z)
 
-    glDisable(GL_TEXTURE_2D)
     for prim in model['primitives']:
         r, g, b = prim['color']
-        if prim['emissive']:
+        if shadow_pass:
+            glDisable(GL_TEXTURE_2D)
+            glDisable(GL_LIGHTING)
+            glColor4f(0.0, 0.0, 0.0, 0.22)
+        elif prim.get('texture_id'):
+            glEnable(GL_TEXTURE_2D)
+            if force_unlit:
+                glDisable(GL_LIGHTING)
+            else:
+                glEnable(GL_LIGHTING)
+            glBindTexture(GL_TEXTURE_2D, prim['texture_id'])
+            glColor3f(1.0, 1.0, 1.0)
+        elif prim['emissive']:
+            glDisable(GL_TEXTURE_2D)
             glDisable(GL_LIGHTING)
             glColor3f(min(r * 2.5, 1.0), min(g * 2.5, 1.0), min(b * 2.5, 1.0))
         else:
+            glDisable(GL_TEXTURE_2D)
             glEnable(GL_LIGHTING)
             glColor3f(r, g, b)
         glBindVertexArray(prim['vao'])
